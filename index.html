@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Image → PDF</title>
+
+<!-- PWA -->
+<link rel="manifest" href="./manifest.json">
+<meta name="theme-color" content="#3a5a40">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Img2PDF">
+<link rel="apple-touch-icon" href="./icon-192.png">
+<link rel="icon" type="image/png" sizes="192x192" href="./icon-192.png">
+<link rel="icon" type="image/png" sizes="512x512" href="./icon-512.png">
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<style>
+  :root{
+    --ink:#1c1a17;
+    --paper:#f6f3ec;
+    --line:#d8d2c4;
+    --accent:#3a5a40;
+    --accent-ink:#f6f3ec;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    min-height:100vh;
+    background:var(--paper);
+    color:var(--ink);
+    font-family:'Georgia', 'Noto Serif Bengali', serif;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    padding:32px 20px 60px;
+  }
+  h1{
+    font-size:1.5rem;
+    letter-spacing:.02em;
+    margin:0 0 6px;
+    font-weight:600;
+  }
+  .sub{
+    color:#6b6558;
+    font-size:.92rem;
+    margin:0 0 32px;
+    text-align:center;
+  }
+  .card{
+    width:100%;
+    max-width:420px;
+    background:#fffdf9;
+    border:1px solid var(--line);
+    border-radius:14px;
+    padding:24px;
+    box-shadow:0 1px 0 var(--line);
+  }
+  .drop{
+    border:1.5px dashed #b8b09a;
+    border-radius:10px;
+    padding:28px 16px;
+    text-align:center;
+    cursor:pointer;
+    transition:border-color .15s ease, background .15s ease;
+    position:relative;
+  }
+  .drop:hover{border-color:var(--accent);}
+  .drop input{
+    position:absolute;
+    inset:0;
+    opacity:0;
+    cursor:pointer;
+  }
+  .drop-label{
+    font-size:.95rem;
+    color:#4a453b;
+  }
+  .drop-hint{
+    font-size:.78rem;
+    color:#8a8474;
+    margin-top:4px;
+  }
+  .preview-wrap{
+    margin-top:18px;
+    display:none;
+  }
+  .preview-wrap.show{display:block;}
+  .preview-img{
+    width:100%;
+    max-height:320px;
+    object-fit:contain;
+    border:1px solid var(--line);
+    border-radius:8px;
+    background:#eee;
+  }
+  .file-name{
+    font-size:.82rem;
+    color:#6b6558;
+    margin-top:8px;
+    word-break:break-all;
+  }
+  button.convert{
+    width:100%;
+    margin-top:20px;
+    padding:13px;
+    border:none;
+    border-radius:8px;
+    background:var(--accent);
+    color:var(--accent-ink);
+    font-size:1rem;
+    font-family:inherit;
+    letter-spacing:.02em;
+    cursor:pointer;
+    transition:opacity .15s ease;
+  }
+  button.convert:disabled{
+    opacity:.4;
+    cursor:not-allowed;
+  }
+  button.convert:not(:disabled):active{
+    opacity:.85;
+  }
+  .status{
+    text-align:center;
+    font-size:.82rem;
+    color:#6b6558;
+    margin-top:12px;
+    min-height:1.2em;
+  }
+  .install-btn{
+    display:none;
+    width:100%;
+    max-width:420px;
+    margin-top:14px;
+    padding:11px;
+    border:1px solid var(--accent);
+    border-radius:8px;
+    background:transparent;
+    color:var(--accent);
+    font-size:.9rem;
+    font-family:inherit;
+    cursor:pointer;
+  }
+  .install-btn.show{display:block;}
+</style>
+</head>
+<body>
+
+<h1>ছবি থেকে PDF</h1>
+<p class="sub">গ্যালারি থেকে একটি ছবি বাছাই করুন, তারপর বাটনে ক্লিক করুন</p>
+
+<div class="card">
+  <div class="drop" id="dropZone">
+    <input type="file" id="fileInput" accept="image/*">
+    <div class="drop-label">📷 ছবি বাছাই করতে ট্যাপ করুন</div>
+    <div class="drop-hint">JPG, PNG সাপোর্টেড</div>
+  </div>
+
+  <div class="preview-wrap" id="previewWrap">
+    <img id="previewImg" class="preview-img" alt="preview">
+    <div class="file-name" id="fileName"></div>
+  </div>
+
+  <button class="convert" id="convertBtn" disabled>PDF বানান ও ডাউনলোড করুন</button>
+  <div class="status" id="status"></div>
+</div>
+
+<button class="install-btn" id="installBtn">📲 অ্যাপ হিসেবে ইনস্টল করুন</button>
+
+<script>
+const fileInput = document.getElementById('fileInput');
+const previewWrap = document.getElementById('previewWrap');
+const previewImg = document.getElementById('previewImg');
+const fileName = document.getElementById('fileName');
+const convertBtn = document.getElementById('convertBtn');
+const status = document.getElementById('status');
+
+let selectedImage = null;
+
+fileInput.addEventListener('change', (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+
+  const reader = new FileReader();
+  reader.onload = (evt) => {
+    selectedImage = evt.target.result;
+    previewImg.src = selectedImage;
+    fileName.textContent = file.name;
+    previewWrap.classList.add('show');
+    convertBtn.disabled = false;
+    status.textContent = '';
+  };
+  reader.readAsDataURL(file);
+});
+
+convertBtn.addEventListener('click', () => {
+  if (!selectedImage) return;
+
+  status.textContent = 'PDF বানানো হচ্ছে...';
+  convertBtn.disabled = true;
+
+  const img = new Image();
+  img.onload = () => {
+    try {
+      const { jsPDF } = window.jspdf;
+      const isLandscape = img.width > img.height;
+      const pdf = new jsPDF({
+        orientation: isLandscape ? 'landscape' : 'portrait',
+        unit: 'px',
+        format: [img.width, img.height]
+      });
+      pdf.addImage(selectedImage, 'JPEG', 0, 0, img.width, img.height);
+      pdf.save('image.pdf');
+      status.textContent = '✓ PDF ডাউনলোড হয়েছে';
+    } catch (err) {
+      status.textContent = 'সমস্যা হয়েছে: ' + err.message;
+    } finally {
+      convertBtn.disabled = false;
+    }
+  };
+  img.src = selectedImage;
+});
+
+// --- PWA: register service worker ---
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('./sw.js').catch((err) => {
+      console.warn('Service worker registration failed:', err);
+    });
+  });
+}
+
+// --- PWA: install prompt (Android/desktop Chrome) ---
+let deferredPrompt = null;
+const installBtn = document.getElementById('installBtn');
+
+window.addEventListener('beforeinstallprompt', (e) => {
+  e.preventDefault();
+  deferredPrompt = e;
+  installBtn.classList.add('show');
+});
+
+installBtn.addEventListener('click', async () => {
+  if (!deferredPrompt) return;
+  deferredPrompt.prompt();
+  await deferredPrompt.userChoice;
+  deferredPrompt = null;
+  installBtn.classList.remove('show');
+});
+
+window.addEventListener('appinstalled', () => {
+  installBtn.classList.remove('show');
+});
+</script>
+
+</body>
+</html>
